@@ -1,7 +1,7 @@
 import os,sys,json
 #github : 배형 wooca12
 
-save_json_root = './mos_train_jsons'
+save_json_root = '../mos_train_jsons'
 object_predicate = ['currentRobotPose','hasStatus','robotVelocity','batteryRemained']
 rel_predicate = ['nearBy','isBehindOf','faceToFace']
 
@@ -31,9 +31,10 @@ def write_json(relation_info, object_info,file_name):
 
     [js_dict['labels'].append(i.split(' ')) for i in relation_info['relationships']]
 
-    temp_obj = dict()
+
 
     for robot in robot_names:
+        temp_obj = dict()
     #zz
         try:
             #로봇 정보 추가하고 싶으면 아래와 같이 추가
@@ -99,6 +100,6 @@ def collect_data(root):
         relation_info['relationships'] = list()
 
 if __name__ =='__main__':
-    root = './mos_train_datasets'
+    root = '../mos_train_datasets'
     createFolder(save_json_root)
     collect_data(root)
