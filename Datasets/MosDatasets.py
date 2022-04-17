@@ -8,9 +8,19 @@ import numpy
 #임시 임베딩 value
 temp_embedding_vector = {'Move':0,'Ready':1,'init_Load':2,'init_load':2,'none':3}
 class MosDataset(Dataset):
-    def __init__(self,root,pharse='train'):
+    def __init__(self,root,split_path,mode='train'):
+        #### 22.04.17 ####
+        # train_test split code #
+        data_list_file = os.path.join(split_path,'{}_list.txt'.format(mode))
 
-        self.data_lists = [os.path.join(root,i) for i in os.listdir(root)]
+        list_file = open(data_list_file, "r")
+        split_data_list = [i.rstrip() for i in list_file.readlines()]
+        list_file.close()
+
+
+        self.data_lists = [os.path.join(root,i) for i in split_data_list]
+        print(self.data_lists)
+        ###
         self.robot_mappint_idx = dict()
         # -> {'AMR_LIFT1': 0, 'AMR_LIFT2': 1, 'AMR_TOW1': 2, 'AMR_TOW2': 3}
         self.edge_mapping_idx = dict()
@@ -80,10 +90,10 @@ class MosDataset(Dataset):
 
 
 if __name__ == '__main__':
-    path = '../../mos_train_jsons'
-
-    a = MosDataset(root=path)
+    path = '../../mos_datasets_jsons'
+    train_test_path = '../split_dataset_list'
+    a = MosDataset(root=path,split_path=train_test_path,mode='test')
     b = DataLoader(dataset=a,batch_size=1)
     for i in b:
         print(i)
-        sys.exit()
+        # sys.exit()

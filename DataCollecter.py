@@ -1,7 +1,8 @@
 import os,sys,json
+import numpy as np
 #github : 배형 wooca12
 
-save_json_root = '../mos_train_jsons'
+save_json_root = '../mos_datasets_jsons'
 object_predicate = ['currentRobotPose','hasStatus','robotVelocity','batteryRemained']
 rel_predicate = ['nearBy','isBehindOf','faceToFace']
 
@@ -17,6 +18,12 @@ def createFolder(directory):
             os.makedirs(directory)
     except OSError:
         print ('Error: Creating directory. ' +  directory)
+def write_txt(data,file_name,save_dir):
+    createFolder(save_dir)
+    with open(os.path.join(save_dir,'{}.txt'.format(file_name)), "w") as file:
+        file.writelines(data)
+    file.close()
+
 
 def write_json(relation_info, object_info,file_name):
 
@@ -54,8 +61,45 @@ def write_json(relation_info, object_info,file_name):
         json.dump(js_dict, make_file, indent="\t")
     print('Save Json!')
 
+def train_test_val_split(data_list,test_size=0.2,val_size=0.1, shuffle=True, random_state=1004):
+    test_num = int(data_list.shape[0] * test_size)
+    val_num = int(data_list.shape[0] * val_size)
+    train_num = data_list.shape[0] - test_num - val_num
+    print('####### total_datasets Number #######\n --> ',data_list.shape[0])
+    print('####### train_num ##########\n -->',train_num)
+    print('####### test_num ###########\n -->',test_num)
+    print('####### val_num ############\n -->',val_num)
+    if shuffle:
+        np.random.seed(random_state)
+        shuffled = np.random.permutation(data_list.shape[0])
+        X = data_list[shuffled]
+        X_train = X[:train_num]
+        X_test = X[train_num:train_num+test_num]
+        X_val = X[train_num+test_num:val_num+train_num+test_num]
+    else:
+        X_train = data_list[:train_num]
+        X_test = data_list[train_num:test_num+train_num]
+        X_val = data_list[train_num+test_num:val_num+test_num+train_num]
+    # print(X_val)
+    # sys.exit()
+    return X_train, X_test,X_val
+
 def collect_data(root):
     file_lists = sorted(os.listdir(root),key = lambda x:int(x.split('_')[2].split('.')[0]))
+
+    ######## 22.04.17 ############
+    ######## Train ,Test txt 파일로 나누기 #############
+    train_list,test_list,val_list = train_test_val_split(np.array(file_lists),test_size=0.2,val_size=0.1,shuffle=False)
+
+    train_list = ['data_{}.json'.format(i.split('_')[2][:-4])+'\n' for i in train_list ]
+    test_list = ['data_{}.json'.format(i.split('_')[2][:-4])+'\n' for i in test_list ]
+    val_list = ['data_{}.json'.format(i.split('_')[2][:-4])+'\n' for i in val_list ]
+
+    write_txt(train_list,file_name='train_list',save_dir='./split_dataset_list')
+    write_txt(test_list, file_name='test_list', save_dir='./split_dataset_list')
+    write_txt(val_list, file_name='val_list', save_dir='./split_dataset_list')
+    sys.exit()
+    #########################################
 
     for idx,file in enumerate(file_lists):
         data_path = os.path.join(root,file)

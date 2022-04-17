@@ -1,15 +1,14 @@
-from TripleNetGCN import TripletGCNModel
-from network_RelNet import RelNetFeat, RelNetCls
+import sys
+import os
+from models.TripleNetGCN import TripletGCNModel
+from models.network_RelNet import RelNetFeat, RelNetCls
 import torch
 from torch import nn
 import torch.optim as optim
 import torch.nn.functional as F
-
-import sys
-import os
+import math
 sys.path.append("..")
 import op_utils
-from Datasets.MosDatasets import MosDataset
 import numpy as np
 
 
@@ -87,7 +86,7 @@ class GCMModel(nn.Module):
                 (obj_pos[0] - sub_pos[0]) ** 2 + (obj_pos[1] - sub_pos[1]) ** 2)  # 두 점 사이 거리 계산
             rad = math.atan2(obj_pos[1] - sub_pos[1], obj_pos[0] - sub_pos[0])  # 두 점 사이 각 계산
             relative_degree = (rad * 180) * math.pi
-            relative_orientation = (x[object_idx][2] - x[subject_idx][2])
+            relative_orientation = (node_feature[object_idx][2] - node_feature[subject_idx][2])
             temp_relative_info[i] = torch.tensor([relative_distance, relative_degree, relative_orientation])
 
         return temp_relative_info
@@ -102,10 +101,17 @@ class GCMModel(nn.Module):
         #gt : [12,3] -- predict : [12,3]
         rel_loss = F.binary_cross_entropy(predict_value['pred_rel'],gt_value.type(torch.FloatTensor))
         # print(predict_value['pred_rel'])
+        # print(gt_value.size())
+        acc = self.cal_acc(predict_value['pred_rel'],gt_value)
+        # sys.exit()
+        # print(predict_value['pred_rel'])
         # print(rel_loss)
+
         if mode =='train':
             self.backward(rel_loss)
-        logs = ("Loss/total_loss", rel_loss.detach().item())
+        logs = ("{} Loss/total_loss:".format(mode), rel_loss.detach().item(),
+                "Acc: ",acc)
+
         return logs,predict_value
 
     def backward(self, loss):
@@ -113,8 +119,18 @@ class GCMModel(nn.Module):
         self.optimizer.step()
         self.optimizer.zero_grad()
 
-
-
+    def cal_acc(self,pred,gt):
+        max_pred_argmax = torch.argmax(pred, dim=1)
+        # print(pred)
+        # print(max_pred_argmax)
+        # print(gt[:,])
+        c = 0
+        for idx, i in enumerate(gt[:, ]):
+            if i[max_pred_argmax[idx]].item() == 1:
+                c += 1
+        acc = c / pred.size(0)
+        # print(acc)
+        return acc
 if __name__ == '__main__':
 
     hy_param = {}
@@ -132,10 +148,14 @@ if __name__ == '__main__':
     # build model
     network = GCMModel('GCMModel', hy_param)
 
-    train_datasets = MosDataset('../../mos_train_jsons')
-    from torch.utils.data import DataLoader
-    import math
+    path = '../../mos_datasets_jsons'
+    train_test_path = '../split_dataset_list'
+
+    train_datasets = MosDataset(root=path,split_path=train_test_path,mode='train')
+    test_datasets = MosDataset(root=path, split_path=train_test_path, mode='test')
+
     trainDataLoader = DataLoader(dataset=train_datasets, batch_size=1, shuffle=True)
+    testDataLoader = DataLoader(dataset=test_datasets, batch_size=1, shuffle=False)
 
     for i in range(0,100):
         for item in trainDataLoader:
