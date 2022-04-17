@@ -1,5 +1,5 @@
 import torch
-
+import torch_geometric
 from models.CloudGCM_Network import *
 from Datasets.MosDatasets import MosDataset
 from torch.utils.data import DataLoader
@@ -46,6 +46,7 @@ def run_process(mode):
             num_cnt = 0
 
             #Train Start
+            network.train()
             for item in trainDataLoader:
                 x = item['x'].squeeze(dim=0)
                 edge_index = item['edge_index'].squeeze(dim=0)
@@ -90,7 +91,15 @@ def run_process(mode):
                 best_acc = epoch_val_acc
                 best_model_wts = copy.deepcopy(network.state_dict())
                 print('==> best model saved - %d / %.1f' % (best_idx, best_acc))
+            check_point = torch.save({'epoch': epoch,'model_state_dict': network.state_dict(),
+                'loss': epoch_val_loss}, './last_checkPoint')
 
+
+        network.load_state_dict(best_model_wts)
+
+        torch.save(network.state_dict(),
+                   '{}/{}'.format('./save_models','gcm_model.pt'))
+        print('model saved')
 
 
     else:
