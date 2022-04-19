@@ -13,19 +13,24 @@ import numpy as np
 
 
 class GCMModel(nn.Module):
-    def __init__(self, name:str,hy_param):
+    def __init__(self, name:str,hy_param,norm_flag=True):
         super(GCMModel, self).__init__()
         self.name = name
         self.relation_info_num = hy_param['dim_rel']
+        self.norm_flag = norm_flag
         # Build model
         models = dict()
         #각 노드마다 속성의 개수가 다 다를 수 있기 때문에 encoding을 통해 차원을 맞춰줌
         models['obj_Node_encoder'] = nn.Sequential(nn.Linear(hy_param['dim_obj'],16),
-                                                    nn.ReLU(True),
+                                                   nn.BatchNorm1d(16),
+                                                   nn.ReLU(True),
+                                                   # nn.Dropout(0.1),
                                                     nn.Linear(16,hy_param['dim_node'])
                                                     )
         models['rel_encoder'] = nn.Sequential(nn.Linear(hy_param['dim_rel'],16),
-                                               nn.ReLU(True),
+                                              nn.BatchNorm1d(16),
+                                              nn.ReLU(True),
+                                              # nn.Dropout(0.1),
                                                nn.Linear(16,hy_param['dim_edge'])
                                                )
         # Triplet GCN
@@ -37,13 +42,17 @@ class GCMModel(nn.Module):
         )
         #classification module
         models['node_cls'] = nn.Sequential(nn.Linear(hy_param['gcn_dim_hidden'],16),
+                                           # nn.BatchNorm1d(16),
                                            nn.ReLU(True),
+                                           # nn.Dropout(0.2),
                                            nn.Linear(16,hy_param['num_node']),
                                            nn.Softmax(dim=1)
                                            )
 
         models['rel_cls'] = nn.Sequential(nn.Linear(hy_param['gcn_dim_hidden'], 32),
-                                           nn.ReLU(True),
+                                          # nn.BatchNorm1d(32),
+                                          nn.ReLU(True),
+                                          # nn.Dropout(0.2),
                                            nn.Linear(32, hy_param['rel_num']),
                                            nn.Softmax(dim=1)
                                            )
@@ -68,7 +77,6 @@ class GCMModel(nn.Module):
 
         pred_node = self.node_cls(gcn_obj_feature)
         pred_rel = self.rel_cls(gcn_rel_feature)
-
         predict_value ={
             'pred_node' : pred_node,
             'pred_rel' : pred_rel
@@ -89,12 +97,35 @@ class GCMModel(nn.Module):
             relative_orientation = (node_feature[object_idx][2] - node_feature[subject_idx][2])
             temp_relative_info[i] = torch.tensor([relative_distance, relative_degree, relative_orientation])
 
-        return temp_relative_info
+        if self.norm_flag:
+            #node normalization
+            total_sum = torch.sum(node_feature,axis=1)
+            copy_x1 = torch.zeros_like(node_feature)
+            non_zero_flag = 2
+            # print(node_data)
+            for idx,tensor in enumerate(node_feature+non_zero_flag):
+                copy_x1[idx] = tensor / total_sum[idx]
+            # print(b)
+            node_feature = copy_x1
+
+            #relation_feature Norm
+            total_sum = torch.sum(temp_relative_info, axis=1)
+            copy_x2 = torch.zeros_like(temp_relative_info)
+            non_zero_flag = 1
+            # print(node_data)
+            for idx, tensor in enumerate(temp_relative_info + non_zero_flag):
+                copy_x2[idx] = tensor / total_sum[idx]
+            # print(b)
+            t = temp_relative_info
+            temp_relative_info = copy_x2
+
+
+        return temp_relative_info,node_feature
 
     def process(self,mode,node_feature,edges_index,gt_value, weights_obj=None, weights_rel=None):
 
         #relation_feature 계산
-        relation_feature = self.getRelFeat(node_feature,edges_index) #12,3
+        relation_feature,node_feature = self.getRelFeat(node_feature,edges_index) #12,3
 
         obj_feature, edge_feature, gcn_rel_feature, gcn_obj_feature,predict_value = self(node_feature, relation_feature, edges_index)
 

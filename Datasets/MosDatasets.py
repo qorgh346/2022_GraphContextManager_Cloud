@@ -4,11 +4,18 @@ import numpy as np
 from torch.utils.data import Dataset,DataLoader
 import torch
 import json
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import numpy
 #임시 임베딩 value
 temp_embedding_vector = {'Move':0,'Ready':1,'init_Load':2,'init_load':2,'none':3}
 class MosDataset(Dataset):
-    def __init__(self,root,split_path,mode='train'):
+    def __init__(self,root,split_path,mode='train',Normalization=True):
+        ### 22. 04.19 ###
+        # Normalization code
+        # MinMaxScaler 객체 생성 --> 정규화 작업 사용
+        self.norm_flag = Normalization
+
+
         #### 22.04.17 ####
         # train_test split code #
         data_list_file = os.path.join(split_path,'{}_list.txt'.format(mode))
@@ -41,6 +48,7 @@ class MosDataset(Dataset):
 
         node_data , edge_index, gt_label = torch.from_numpy(node_data).float(),torch.from_numpy(edge_index).long(),\
                                            torch.from_numpy(gt_label).long()
+
         meta_data = {'GT':gt_label,'robot_mappint_idx':self.robot_mappint_idx,'edge_mapping_idx':self.edge_mapping_idx,
                      'relation_mapping_idx':self.relation_mapping_idx}
         return {'x':node_data,'edge_index':edge_index,'meta':meta_data}
