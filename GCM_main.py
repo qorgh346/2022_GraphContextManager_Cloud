@@ -13,7 +13,7 @@ def init_param():
     hy_param['dim_edge'] = 32
     hy_param['gcn_dim_hidden'] = 32
     hy_param['rel_num'] = 3
-    hy_param['lr'] = 0.0001
+    hy_param['lr'] = 0.01
     # num_node
     hy_param['num_node'] = 4
     hy_param['path'] = '../mos_datasets_jsons'
@@ -51,6 +51,8 @@ def run_process(mode,model_path='./save_models'):
                 x = item['x'].squeeze(dim=0)
                 edge_index = item['edge_index'].squeeze(dim=0)
                 gt_label = item['meta']['GT'].squeeze(dim=0)
+                # print('id : ', item['meta']['id'])
+
                 logs, predict_value = network.process('train', x, edge_index, gt_label)
 
                 running_loss += logs[1]
@@ -82,6 +84,7 @@ def run_process(mode,model_path='./save_models'):
             epoch_val_loss = running_loss / num_cnt
             epoch_val_acc = running_corrects / num_cnt
 
+
             #에폭 loss & acc 계산
             print('{}/{} val(loss) = {:.5f} \t val(acc) = {:.5f}'.format(epoch, hy_param['epochs'], epoch_val_loss,
                                                                epoch_val_acc))
@@ -93,19 +96,20 @@ def run_process(mode,model_path='./save_models'):
                 print('==> best model saved - %d / %.1f' % (best_idx, best_acc))
                 check_point = torch.save({'epoch': epoch,'model_state_dict': network.state_dict(),
                 'loss': epoch_val_loss}, './last_checkPoint')
-
-
+            if epoch % 10 == 0:
+                torch.save(network.state_dict(),
+                       '{}/{}'.format('./save_models', 'model_epoch{}.pt'.format(epoch)))
         network.load_state_dict(best_model_wts)
 
         torch.save(network.state_dict(),
-                   '{}/{}'.format('./save_models','gcm_model{}.pt'.format(epoch)))
+                   '{}/{}'.format('./save_models','bestmodel.pt'))
         print('model saved')
 
 
     else:
         # Test Start
         #load_model
-        model_file_name = 'gcm_model99.pt' #추후에 best model로 변경
+        model_file_name = 'bestmodel.pt' #추후에 best model로 변경
         network.load_state_dict(torch.load(os.path.join(model_path,model_file_name)))
         # print(network)
         #
@@ -118,9 +122,13 @@ def run_process(mode,model_path='./save_models'):
             with torch.no_grad():
                 network.eval()
                 x = item['x'].squeeze(dim=0)
+                print('id : ', item['meta']['id'])
+
+
                 edge_index = item['edge_index'].squeeze(dim=0)
                 gt_label = item['meta']['GT'].squeeze(dim=0)
                 logs, predict_value = network.process('test', x, edge_index, gt_label)
+                print(logs)
                 running_loss += logs[1]
                 running_corrects += logs[3]
                 num_cnt += 1

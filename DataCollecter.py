@@ -1,5 +1,6 @@
 import os,sys,json
 import numpy as np
+import shutil
 #github : 배형 wooca12
 
 save_json_root = '../mos_datasets_jsons'
@@ -85,8 +86,10 @@ def train_test_val_split(data_list,test_size=0.2,val_size=0.1, shuffle=True, ran
     return X_train, X_test,X_val
 
 def collect_data(root):
-    file_lists = sorted(os.listdir(root),key = lambda x:int(x.split('_')[2].split('.')[0]))
+    # data_folders = os.listdir(root)
 
+    file_lists = sorted(os.listdir(root),key = lambda x:int(x.split('_')[2].split('.')[0]))
+    print(file_lists)
     ######## 22.04.17 ############
     ######## Train ,Test txt 파일로 나누기 #############
     train_list,test_list,val_list = train_test_val_split(np.array(file_lists),test_size=0.2,val_size=0.1,shuffle=False)
@@ -98,7 +101,7 @@ def collect_data(root):
     write_txt(train_list,file_name='train_list',save_dir='./split_dataset_list')
     write_txt(test_list, file_name='test_list', save_dir='./split_dataset_list')
     write_txt(val_list, file_name='val_list', save_dir='./split_dataset_list')
-    sys.exit()
+
     #########################################
 
     for idx,file in enumerate(file_lists):
@@ -143,7 +146,26 @@ def collect_data(root):
         # 초기화
         relation_info['relationships'] = list()
 
+def move_data(root):
+    folder_lists = os.listdir(root)
+    c = 0
+    for idx,folder in enumerate(folder_lists):
+        if idx == 0:
+            continue
+        src = os.path.join(root,folder)
+        dir = '../mos_train_datasets'
+        files = os.listdir(src)
+        # print(files)
+        for file in files:
+            filename = 'data_info_{}.txt'.format(c)
+            a = os.path.join(dir, filename)
+            shutil.move(os.path.join(src,file), os.path.join(dir ,filename))
+            c += 1
+    print('끝')
+    # sys.exit()
+
 if __name__ =='__main__':
-    root = '../mos_train_datasets'
+    root = '../CM_Datasets'
     createFolder(save_json_root)
-    collect_data(root)
+    # move_data(root)
+    collect_data('../mos_train_datasets')

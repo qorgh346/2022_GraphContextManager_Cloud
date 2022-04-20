@@ -7,7 +7,7 @@ import json
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import numpy
 #임시 임베딩 value
-temp_embedding_vector = {'Move':0,'Ready':1,'init_Load':2,'init_load':2,'none':3}
+temp_embedding_vector = {'Move':0,'Ready':1,'init_Load':2,'init_load':2,'Loading':3,'none':4}
 class MosDataset(Dataset):
     def __init__(self,root,split_path,mode='train',Normalization=True):
         ### 22. 04.19 ###
@@ -50,7 +50,8 @@ class MosDataset(Dataset):
                                            torch.from_numpy(gt_label).long()
 
         meta_data = {'GT':gt_label,'robot_mappint_idx':self.robot_mappint_idx,'edge_mapping_idx':self.edge_mapping_idx,
-                     'relation_mapping_idx':self.relation_mapping_idx}
+                     'relation_mapping_idx':self.relation_mapping_idx,
+                     'id':data['id']}
         return {'x':node_data,'edge_index':edge_index,'meta':meta_data}
 
     def __len__(self):

@@ -42,7 +42,7 @@ class GCMModel(nn.Module):
         )
         #classification module
         models['node_cls'] = nn.Sequential(nn.Linear(hy_param['gcn_dim_hidden'],16),
-                                           # nn.BatchNorm1d(16),
+                                           nn.BatchNorm1d(16),
                                            nn.ReLU(True),
                                            # nn.Dropout(0.2),
                                            nn.Linear(16,hy_param['num_node']),
@@ -50,7 +50,7 @@ class GCMModel(nn.Module):
                                            )
 
         models['rel_cls'] = nn.Sequential(nn.Linear(hy_param['gcn_dim_hidden'], 32),
-                                          # nn.BatchNorm1d(32),
+                                          nn.BatchNorm1d(32),
                                           nn.ReLU(True),
                                           # nn.Dropout(0.2),
                                            nn.Linear(32, hy_param['rel_num']),
@@ -130,9 +130,12 @@ class GCMModel(nn.Module):
         obj_feature, edge_feature, gcn_rel_feature, gcn_obj_feature,predict_value = self(node_feature, relation_feature, edges_index)
 
         #gt : [12,3] -- predict : [12,3]
+        # print(predict_value['pred_rel'])
         rel_loss = F.binary_cross_entropy(predict_value['pred_rel'],gt_value.type(torch.FloatTensor))
         # print(predict_value['pred_rel'])
         # print(gt_value.size())
+        # print(gt_value)
+        # print('--?')
         acc = self.cal_acc(predict_value['pred_rel'],gt_value)
         # sys.exit()
         # print(predict_value['pred_rel'])
@@ -193,6 +196,7 @@ if __name__ == '__main__':
             x = item['x'].squeeze(dim=0)
             edge_index = item['edge_index'].squeeze(dim=0)
             gt_label = item['meta']['GT'].squeeze(dim=0)
+            print('id : ',item['meta']['id'])
             logs, predict_value = network.process('train', x, edge_index, gt_label)
             print(logs)
             # print(predict_value)
