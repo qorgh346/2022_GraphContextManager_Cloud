@@ -25,7 +25,7 @@ def init_param():
 hy_param = init_param()
 # build model
 network = GCMModel('GCMModel', hy_param,norm_flag=True)
-
+print(network)
 #build Datasets
 train_datasets = MosDataset(root=hy_param['path'], split_path=hy_param['train_test_path'], mode='train',Normalization=True)
 test_datasets = MosDataset(root=hy_param['path'], split_path=hy_param['train_test_path'], mode='test',Normalization=True)
