@@ -7,7 +7,7 @@ import json
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import numpy
 #임시 임베딩 value
-temp_embedding_vector = {'Move':0,'Ready':1,'init_Load':2,'init_load':2,'Loading':3,'none':4}
+temp_embedding_vector = {'Move':1,'Ready':2,'init_Load':3,'init_load':4,'Loading':5,'Unloading':6,'Charging':7,'ChargeStopping':8, 'none':9}
 class MosDataset(Dataset):
     def __init__(self,root,split_path,mode='train',Normalization=True):
         ### 22. 04.19 ###
@@ -26,17 +26,18 @@ class MosDataset(Dataset):
 
 
         self.data_lists = [os.path.join(root,i) for i in split_data_list]
-        print(self.data_lists)
+        # print(self.data_lists)
         ###
         self.robot_mappint_idx = dict()
         # -> {'AMR_LIFT1': 0, 'AMR_LIFT2': 1, 'AMR_TOW1': 2, 'AMR_TOW2': 3}
         self.edge_mapping_idx = dict()
         # -> #{'0_1': 0, '0_2': 1, '0_3': 2, '1_0': 3, '1_2': 4, '1_3': 5, '2_0': 6, '2_1': 7, '2_3': 8, '3_0': 9, '3_1': 10, '3_2': 11}
-        self.relation_list = ['nearBy','isBehindOf','faceToFace']
+        self.relation_list = ['nearBy','isBehindOf','faceToFace','None']
         self.relation_mapping_idx = {v:k for k,v in enumerate(self.relation_list)}
         #-> {#nearBy : 0 ,isBehindOf : 1 .... }
     def __getitem__(self, idx):
         data_path = self.data_lists[idx]
+        # print(data_path)
         with open(data_path, "r") as d_json:
             data = json.load(d_json)
         #Node
@@ -50,8 +51,8 @@ class MosDataset(Dataset):
                                            torch.from_numpy(gt_label).long()
 
         meta_data = {'GT':gt_label,'robot_mappint_idx':self.robot_mappint_idx,'edge_mapping_idx':self.edge_mapping_idx,
-                     'relation_mapping_idx':self.relation_mapping_idx,
-                     'id':data['id']}
+                     'relation_mapping_idx':self.relation_mapping_idx
+                     }
         return {'x':node_data,'edge_index':edge_index,'meta':meta_data}
 
     def __len__(self):
@@ -101,7 +102,7 @@ class MosDataset(Dataset):
 if __name__ == '__main__':
     path = '../../mos_datasets_jsons'
     train_test_path = '../split_dataset_list'
-    a = MosDataset(root=path,split_path=train_test_path,mode='test')
+    a = MosDataset(root=path,split_path=train_test_path,mode='train')
     b = DataLoader(dataset=a,batch_size=1)
     for i in b:
         print(i)

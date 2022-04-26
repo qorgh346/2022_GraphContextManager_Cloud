@@ -59,12 +59,12 @@ def node_pair_visualization(save_path,name):
 
     for i in range(rows):
         plt.subplot(4,3,i+1)
-        plt.bar(predicate.keys(),distribution_table[i],width=0.4,color=['r','g','b'])
+        plt.bar(predicate.keys(),distribution_table[i],width=0.4,color=['r', 'g', 'b'])
         src_idx = convert_mapping_rel[i].split('_')[0]
         obj_idx = convert_mapping_rel[i].split('_')[1]
-        plt.title('{} = {}'.format(class_list[int(src_idx)],class_list[int(obj_idx)]),fontsize=15)
+        plt.title('{} = {}'.format(class_list[int(src_idx)], class_list[int(obj_idx)]), fontsize=15)
         plt.ylim([0, 200])
-    plt.savefig('{}/{}.png'.format(save_path,name))
+    plt.savefig('{}/{}.png'.format(save_path, name))
 
 def read_json(file):
     with open(file,'r') as f:

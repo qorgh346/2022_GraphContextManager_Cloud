@@ -12,8 +12,8 @@ def init_param():
     hy_param['dim_rel'] = 3
     hy_param['dim_edge'] = 32
     hy_param['gcn_dim_hidden'] = 32
-    hy_param['rel_num'] = 3
-    hy_param['lr'] = 0.01
+    hy_param['rel_num'] = 4
+    hy_param['lr'] = 0.0001
     # num_node
     hy_param['num_node'] = 4
     hy_param['path'] = '../mos_datasets_jsons'
@@ -122,7 +122,7 @@ def run_process(mode,model_path='./save_models'):
             with torch.no_grad():
                 network.eval()
                 x = item['x'].squeeze(dim=0)
-                print('id : ', item['meta']['id'])
+                # print('id : ', item['meta']['id'])
 
 
                 edge_index = item['edge_index'].squeeze(dim=0)
@@ -158,5 +158,5 @@ def run_process(mode,model_path='./save_models'):
 
 if __name__ == '__main__':
     #process Start
-    # run_process(mode='train')
-    run_process(mode='test')
+    run_process(mode='train')
+    # run_process(mode='test')

@@ -66,7 +66,7 @@ class GCMModel(nn.Module):
         print('')
         self.optimizer = optim.Adam(params=params, lr=hy_param['lr'],)
         self.optimizer.zero_grad()
-        self.criterion = nn.CrossEntropyLoss()
+        self.criterion = nn.CrossEntropyLoss(ignore_index=0)
 
     def forward(self, node_feature, rel_feature, edges_index):
 
@@ -131,6 +131,7 @@ class GCMModel(nn.Module):
 
         #gt : [12,3] -- predict : [12,3]
         # print(predict_value['pred_rel'])
+        # print(gt_value)
         rel_loss = F.binary_cross_entropy(predict_value['pred_rel'],gt_value.type(torch.FloatTensor))
         # print(predict_value['pred_rel'])
         # print(gt_value.size())
@@ -154,16 +155,23 @@ class GCMModel(nn.Module):
         self.optimizer.zero_grad()
 
     def cal_acc(self,pred,gt):
+        #threshold...
+        # threshold = 0.8
+        # a = (pred>=threshold).nonzero()
+        # c = 0
+        # for i in a:
+        #     row = i[0]
+        #     col = i[1]
+        #     if gt[row][col].item() == 1:
+        #         c += 1
+
+        # ArgMax
         max_pred_argmax = torch.argmax(pred, dim=1)
-        # print(pred)
-        # print(max_pred_argmax)
-        # print(gt[:,])
         c = 0
         for idx, i in enumerate(gt[:, ]):
             if i[max_pred_argmax[idx]].item() == 1:
                 c += 1
         acc = c / pred.size(0)
-        # print(acc)
         return acc
 if __name__ == '__main__':
 
@@ -174,7 +182,7 @@ if __name__ == '__main__':
     hy_param['dim_rel'] = 3
     hy_param['dim_edge'] = 32
     hy_param['gcn_dim_hidden'] = 32
-    hy_param['rel_num'] = 3
+    hy_param['rel_num'] = 4
     hy_param['lr'] = 0.0001
     #num_node
 
