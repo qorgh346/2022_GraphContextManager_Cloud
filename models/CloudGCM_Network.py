@@ -41,20 +41,20 @@ class GCMModel(nn.Module):
             dim_hidden=hy_param['gcn_dim_hidden']
         )
         #classification module
-        models['node_cls'] = nn.Sequential(nn.Linear(hy_param['gcn_dim_hidden'],16),
-                                           nn.BatchNorm1d(16),
-                                           nn.ReLU(True),
-                                           # nn.Dropout(0.2),
-                                           nn.Linear(16,hy_param['num_node']),
-                                           nn.Softmax(dim=1)
-                                           )
+        # models['node_cls'] = nn.Sequential(nn.Linear(hy_param['gcn_dim_hidden'],16),
+        #                                    nn.BatchNorm1d(16),
+        #                                    nn.ReLU(True),
+        #                                    # nn.Dropout(0.2),
+        #                                    nn.Linear(16,hy_param['num_node'])
+        #                                    ,nn.Softmax(dim=1)
+        #                                    )
 
         models['rel_cls'] = nn.Sequential(nn.Linear(hy_param['gcn_dim_hidden'], 32),
                                           nn.BatchNorm1d(32),
                                           nn.ReLU(True),
                                           # nn.Dropout(0.2),
-                                           nn.Linear(32, hy_param['rel_num']),
-                                           nn.Softmax(dim=1)
+                                           nn.Linear(32, hy_param['rel_num'])
+                                           ,nn.Softmax(dim=1)
                                            )
         # --------------------------------
         params = list()
@@ -66,7 +66,7 @@ class GCMModel(nn.Module):
         print('')
         self.optimizer = optim.Adam(params=params, lr=hy_param['lr'],)
         self.optimizer.zero_grad()
-        self.criterion = nn.CrossEntropyLoss(ignore_index=0)
+        self.criterion = nn.BCELoss()
 
     def forward(self, node_feature, rel_feature, edges_index):
 
@@ -75,10 +75,10 @@ class GCMModel(nn.Module):
         edge_feature = self.rel_encoder(rel_feature)  # relationship 피쳐 추출
         gcn_obj_feature, gcn_rel_feature = self.triplet_gcn(obj_feature, edge_feature, edges_index)
 
-        pred_node = self.node_cls(gcn_obj_feature)
+        # pred_node = self.node_cls(gcn_obj_feature)
         pred_rel = self.rel_cls(gcn_rel_feature)
         predict_value ={
-            'pred_node' : pred_node,
+            # 'pred_node' : pred_node
             'pred_rel' : pred_rel
         }
         return obj_feature, edge_feature, gcn_rel_feature,gcn_obj_feature,predict_value
@@ -130,8 +130,8 @@ class GCMModel(nn.Module):
         obj_feature, edge_feature, gcn_rel_feature, gcn_obj_feature,predict_value = self(node_feature, relation_feature, edges_index)
 
         #gt : [12,3] -- predict : [12,3]
-        # print(predict_value['pred_rel'])
-        # print(gt_value)
+        # rel_loss = self.criterion(predict_value['pred_rel'],gt_value.type(torch.FloatTensor))
+
         rel_loss = F.binary_cross_entropy(predict_value['pred_rel'],gt_value.type(torch.FloatTensor))
         # print(predict_value['pred_rel'])
         # print(gt_value.size())
@@ -168,6 +168,8 @@ class GCMModel(nn.Module):
         # ArgMax
         max_pred_argmax = torch.argmax(pred, dim=1)
         c = 0
+        # print(pred)
+        # print(gt)
         for idx, i in enumerate(gt[:, ]):
             if i[max_pred_argmax[idx]].item() == 1:
                 c += 1
@@ -182,7 +184,7 @@ if __name__ == '__main__':
     hy_param['dim_rel'] = 3
     hy_param['dim_edge'] = 32
     hy_param['gcn_dim_hidden'] = 32
-    hy_param['rel_num'] = 4
+    hy_param['rel_num'] = 3
     hy_param['lr'] = 0.0001
     #num_node
 

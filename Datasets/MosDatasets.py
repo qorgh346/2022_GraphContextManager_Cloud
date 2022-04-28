@@ -32,7 +32,7 @@ class MosDataset(Dataset):
         # -> {'AMR_LIFT1': 0, 'AMR_LIFT2': 1, 'AMR_TOW1': 2, 'AMR_TOW2': 3}
         self.edge_mapping_idx = dict()
         # -> #{'0_1': 0, '0_2': 1, '0_3': 2, '1_0': 3, '1_2': 4, '1_3': 5, '2_0': 6, '2_1': 7, '2_3': 8, '3_0': 9, '3_1': 10, '3_2': 11}
-        self.relation_list = ['nearBy','isBehindOf','faceToFace','None']
+        self.relation_list = ['nearBy','isBehindOf','faceToFace']
         self.relation_mapping_idx = {v:k for k,v in enumerate(self.relation_list)}
         #-> {#nearBy : 0 ,isBehindOf : 1 .... }
     def __getitem__(self, idx):
@@ -70,9 +70,11 @@ class MosDataset(Dataset):
         return node_data
 
     def getGT_label(self,row_size,data):
-
+        # gt_label = np.full([row_size,len(self.relation_list)],-1)
         gt_label = np.zeros([row_size, len(self.relation_list)])
         for rel in data:
+            if rel[1] == 'None':
+                continue
             subject = rel[0]  # "AMR_LIFT2" -->row
             object = rel[2]  # AMR_TOW1" -->row
             relation = rel[1]  # nearby --> col

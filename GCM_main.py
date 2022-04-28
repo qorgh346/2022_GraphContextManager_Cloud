@@ -7,12 +7,12 @@ import copy
 def init_param():
     hy_param = {}
     hy_param['num_layer'] = 2
-    hy_param['dim_node'] = 32
+    hy_param['dim_node'] = 64
     hy_param['dim_obj'] = 6
     hy_param['dim_rel'] = 3
-    hy_param['dim_edge'] = 32
-    hy_param['gcn_dim_hidden'] = 32
-    hy_param['rel_num'] = 4
+    hy_param['dim_edge'] = 64
+    hy_param['gcn_dim_hidden'] = 64
+    hy_param['rel_num'] = 3
     hy_param['lr'] = 0.0001
     # num_node
     hy_param['num_node'] = 4
@@ -28,14 +28,15 @@ network = GCMModel('GCMModel', hy_param,norm_flag=True)
 print(network)
 #build Datasets
 train_datasets = MosDataset(root=hy_param['path'], split_path=hy_param['train_test_path'], mode='train',Normalization=True)
-test_datasets = MosDataset(root=hy_param['path'], split_path=hy_param['train_test_path'], mode='test',Normalization=True)
-val_datasets = MosDataset(root=hy_param['path'], split_path=hy_param['train_test_path'], mode='val',Normalization=True)
+test_datasets = MosDataset(root=hy_param['path'], split_path=hy_param['train_test_path'], mode='train',Normalization=True)
+val_datasets = MosDataset(root=hy_param['path'], split_path=hy_param['train_test_path'], mode='train',Normalization=True)
 #build Dataloader
 trainDataLoader = DataLoader(dataset=train_datasets, batch_size=1, shuffle=True)
 testDataLoader = DataLoader(dataset=test_datasets, batch_size=1, shuffle=False)
 valDataLoader = DataLoader(dataset=val_datasets, batch_size=1, shuffle=True)
 
 print(valDataLoader)
+
 
 def run_process(mode,model_path='./save_models'):
     if mode == 'train':
@@ -117,7 +118,13 @@ def run_process(mode,model_path='./save_models'):
         running_corrects = 0
         num_cnt = 0
 
+        # 그래프 시각화 viz 객체 생성
+        from utils import Graph_Vis
+        import time
         for item in testDataLoader:
+            gv = Graph_Vis.GraphVIS('C:/Users/ailab/Desktop/graphVis')
+            gv.init_json()
+            [gv.set_Node(robot) for robot in ['AMR_LIFT1', 'AMR_LIFT2', 'AMR_TOW1', 'AMR_TOW2']]
             print('Start')
             with torch.no_grad():
                 network.eval()
@@ -128,7 +135,7 @@ def run_process(mode,model_path='./save_models'):
                 edge_index = item['edge_index'].squeeze(dim=0)
                 gt_label = item['meta']['GT'].squeeze(dim=0)
                 logs, predict_value = network.process('test', x, edge_index, gt_label)
-                print(logs)
+
                 running_loss += logs[1]
                 running_corrects += logs[3]
                 num_cnt += 1
@@ -138,17 +145,35 @@ def run_process(mode,model_path='./save_models'):
                 robot_mappint_idx = {v.item(): k for k, v in item['meta']['robot_mappint_idx'].items()}
                 # print(robot_mappint_idx)
                 # print(relation_mapping_idx)
-                # print(predict_value['pred_rel'])
-                # print(edge_mapping_idx)
+                threshold = 0.44
+                predict = predict_value['pred_rel'] >= threshold
 
-                max_pred_argmax = torch.argmax(predict_value['pred_rel'], dim=1)
-                for idx,result in enumerate(max_pred_argmax):
-                    sub_obj = edge_mapping_idx[idx].split('_')
-                    sub = robot_mappint_idx[int(sub_obj[0])]
-                    obj =robot_mappint_idx[int(sub_obj[1])]
-                    predicate = relation_mapping_idx[result.item()]
-                    print('{}_{}_{}'.format(sub,predicate,obj))
+                for pos in predict.nonzero():
+                    row = pos[0]
+                    col = pos[1]
+                    src_obj = edge_mapping_idx[row.item()].split('_')
+                    subject = robot_mappint_idx[int(src_obj[0])]
+                    object = robot_mappint_idx[int(src_obj[1])]
+                    predicate = relation_mapping_idx[col.item()]
+                    print('예측 : \t {}_{}_{}'.format(subject,predicate,object))
+                    gv.set_Edge(subject,predicate,object)
 
+                    # sys.exit()
+            gv.write_json()
+
+            #     max_pred_argmax = torch.argmax(predict_value['pred_rel'], dim=1)
+            #     for idx,result in enumerate(max_pred_argmax):
+            #         sub_obj = edge_mapping_idx[idx].split('_')
+            #         sub = robot_mappint_idx[int(sub_obj[0])]
+            #         obj =robot_mappint_idx[int(sub_obj[1])]
+            #         predicate = relation_mapping_idx[result.item()]
+            #         print('{}_{}_{}'.format(sub,predicate,obj))
+            #         gv.set_Edge(sub,predicate,obj)
+            #
+            #         # graph_vis(sub,predicate,obj)
+            # print(gv.fsd_json)
+            # gv.write_json()
+            # # sys.exit()
         test_loss = running_loss / num_cnt
         test_acc = running_corrects / num_cnt
 
@@ -158,5 +183,5 @@ def run_process(mode,model_path='./save_models'):
 
 if __name__ == '__main__':
     #process Start
-    run_process(mode='train')
-    # run_process(mode='test')
+    # run_process(mode='train')
+    run_process(mode='test')
