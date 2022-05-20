@@ -4,7 +4,7 @@ import numpy as np
 from torch.utils.data import Dataset,DataLoader
 import torch
 import json
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
+#from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import numpy
 #임시 임베딩 value
 temp_embedding_vector = {'Move':1,'Ready':2,'init_Load':3,'init_load':4,'Loading':5,'Unloading':6,'Charging':7,'ChargeStopping':8, 'none':9}
@@ -40,20 +40,27 @@ class MosDataset(Dataset):
         # print(data_path)
         with open(data_path, "r") as d_json:
             data = json.load(d_json)
-        #Node
-        node_data = self.getNode_info(data['robots'])
-        #Get Edge Index
-        edge_index = self.getEdgeIndex(data['robots'])
-        #GT
-        gt_label = self.getGT_label(edge_index.shape[1],data['labels'])
+        nodes = list()
+        gt_labels = list()
+        for idx, time in enumerate(data.keys()):
+            #Node
+            node_data = self.getNode_info(data[time]['robots'])
+            #Edge
+            edge_index = self.getEdgeIndex(data[time]['robots'])
+            #GT
+            gt_label = self.getGT_label(edge_index.shape[1],data[time]['labels'])
 
-        node_data , edge_index, gt_label = torch.from_numpy(node_data).float(),torch.from_numpy(edge_index).long(),\
-                                           torch.from_numpy(gt_label).long()
-
-        meta_data = {'GT':gt_label,'robot_mappint_idx':self.robot_mappint_idx,'edge_mapping_idx':self.edge_mapping_idx,
+            node_data , edge_index, gt_label = torch.from_numpy(node_data).float(),torch.from_numpy(edge_index).long(),\
+                                               torch.from_numpy(gt_label).long()
+            nodes.append(node_data)
+            # edge_indices.append(edge_index)
+            gt_labels.append(gt_label)
+            # Get Edge Index
+        meta_data = {'GT':torch.stack(gt_labels).permute(1,2,0), 'robot_mappint_idx':self.robot_mappint_idx, 'edge_mapping_idx':self.edge_mapping_idx,
                      'relation_mapping_idx':self.relation_mapping_idx
                      }
-        return {'x':node_data,'edge_index':edge_index,'meta':meta_data}
+       # return {'x':node_data,'edge_index':edge_index,'meta':meta_data}
+        return {'nodes': torch.stack(nodes).permute(1,2,0), 'edge_index': edge_index, 'meta_data': meta_data}
 
     def __len__(self):
         return len(self.data_lists)
@@ -70,19 +77,19 @@ class MosDataset(Dataset):
         return node_data
 
     def getGT_label(self,row_size,data):
-        gt_label = np.full([row_size,len(self.relation_list)],-1)
-        # gt_label = np.zeros([row_size, len(self.relation_list)])
+        # gt_label = np.full([row_size,len(self.relation_list)],-1)
+        gt_label = np.zeros([row_size, len(self.relation_list)])
         for rel in data:
             if rel[1] == 'None':
                 continue
             subject = rel[0]  # "AMR_LIFT2" -->row
             object = rel[2]  # AMR_TOW1" -->row
             relation = rel[1]  # nearby --> col
+
             row_num = "{}_{}".format(self.robot_mappint_idx[subject], self.robot_mappint_idx[object])
             col_num = self.relation_mapping_idx[relation]
             gt_label[self.edge_mapping_idx[row_num], col_num] = 1
         return gt_label
-
     def getEdgeIndex(self,data):
         #edge_index - fully connected
         edge_index = list()
@@ -90,8 +97,6 @@ class MosDataset(Dataset):
         for i in range(len(data)):
             for j in range(len(data)):
                 if i == j: continue
-                # if i >=2 and j < 2: continue #--> 관계 안갖음
-                # if i<2 and j>=2: continue #관계 가질 수 없음
                 edge_index.append([i,j])
                 self.robot_mappint_idx[data[i]['name']] = i
                 # --> {'AMR_LIFT1': 0, 'AMR_LIFT2': 1, 'AMR_TOW1': 2, 'AMR_TOW2': 3}
@@ -104,10 +109,12 @@ class MosDataset(Dataset):
 
 
 if __name__ == '__main__':
-    path = '../../mos_datasets_jsons'
+    path = './mos_timestamp_jsons'
     train_test_path = '../split_dataset_list'
     a = MosDataset(root=path,split_path=train_test_path,mode='train')
     b = DataLoader(dataset=a,batch_size=1)
     for i in b:
-        print(i)
-        # sys.exit()
+        print(i["nodes"].size())
+        print(i['edge_index'].size())
+        print(i['meta_data']['GT'].size())
+        sys.exit()

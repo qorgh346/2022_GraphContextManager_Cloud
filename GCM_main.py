@@ -1,44 +1,79 @@
+import sys
+
 import torch
 import torch_geometric
 from models.CloudGCM_Network import *
-from Datasets.MosDatasets import MosDataset
+from Datasets.MosDatasets_bae import MosDataset
 from torch.utils.data import DataLoader
 import copy
 def init_param():
     hy_param = {}
     hy_param['num_layer'] = 2
-    hy_param['dim_node'] = 64
+    hy_param['dim_node'] = 32
     hy_param['dim_obj'] = 6
     hy_param['dim_rel'] = 3
-    hy_param['dim_edge'] = 64
-    hy_param['gcn_dim_hidden'] = 64
+    hy_param['dim_edge'] = 32
+    hy_param['gcn_dim_hidden'] = 128
     hy_param['rel_num'] = 3
     hy_param['lr'] = 0.0001
+    hy_param['periods'] = 18
+    hy_param['batch_size'] = 1
+    hy_param['temporal'] = True
     # num_node
     hy_param['num_node'] = 4
-    hy_param['path'] = '../mos_datasets_jsons'
+
+    #temporal_dataset load
+    hy_param['path'] = '../mos_timestamp_jsons'
+    #default dataset load
+    # hy_param['path'] = '../mos_datasets_jsons'
+
     hy_param['train_test_path'] = './split_dataset_list'
     hy_param['epochs'] = 100
     return hy_param
 
+def build_datasets(hy_param):
+    # Update Temporal Dataset 2022.05.19
+    # path = './mos_timestamp_jsons'
+    #     train_test_path = '../split_dataset_list'
+    #     a = MosDataset(root=path,split_path=train_test_path,mode='train')
+    #     b = DataLoader(dataset=a,batch_size=1)
+    #     for i in b:
+    #         print(i["nodes"].size())
+    #         print(i['edge_index'].size())
+    #         print(i['meta_data']['GT'].size())
+    #         sys.exit()
+    if hy_param['temporal']:
+        # build Datasets
+        train_datasets = MosDataset(root=hy_param['path'], split_path=hy_param['train_test_path'], mode='train',
+                                    Normalization=True)
+        test_datasets = MosDataset(root=hy_param['path'], split_path=hy_param['train_test_path'], mode='train',
+                                   Normalization=True)
+        val_datasets = MosDataset(root=hy_param['path'], split_path=hy_param['train_test_path'], mode='train',
+                                  Normalization=True)
+        # build Dataloader
+        trainDataLoader = DataLoader(dataset=train_datasets, batch_size=1, shuffle=True)
+        testDataLoader = DataLoader(dataset=test_datasets, batch_size=1, shuffle=False)
+        valDataLoader = DataLoader(dataset=val_datasets, batch_size=1, shuffle=True)
+    else:
+        # build Datasets
+        train_datasets = MosDataset(root=hy_param['path'], split_path=hy_param['train_test_path'], mode='train',
+                                    Normalization=True)
+        test_datasets = MosDataset(root=hy_param['path'], split_path=hy_param['train_test_path'], mode='train',
+                                   Normalization=True)
+        val_datasets = MosDataset(root=hy_param['path'], split_path=hy_param['train_test_path'], mode='train',
+                                  Normalization=True)
+        # build Dataloader
+        trainDataLoader = DataLoader(dataset=train_datasets, batch_size=1, shuffle=True)
+        testDataLoader = DataLoader(dataset=test_datasets, batch_size=1, shuffle=False)
+        valDataLoader = DataLoader(dataset=val_datasets, batch_size=1, shuffle=True)
 
-hy_param = init_param()
-# build model
-network = GCMModel('GCMModel', hy_param,norm_flag=True)
-print(network)
-#build Datasets
-train_datasets = MosDataset(root=hy_param['path'], split_path=hy_param['train_test_path'], mode='train',Normalization=True)
-test_datasets = MosDataset(root=hy_param['path'], split_path=hy_param['train_test_path'], mode='train',Normalization=True)
-val_datasets = MosDataset(root=hy_param['path'], split_path=hy_param['train_test_path'], mode='train',Normalization=True)
-#build Dataloader
-trainDataLoader = DataLoader(dataset=train_datasets, batch_size=1, shuffle=True)
-testDataLoader = DataLoader(dataset=test_datasets, batch_size=1, shuffle=False)
-valDataLoader = DataLoader(dataset=val_datasets, batch_size=1, shuffle=True)
+    return trainDataLoader,testDataLoader,valDataLoader
 
-print(valDataLoader)
+def run_process(mode,hy_param,model_path='./save_models'):
 
+    #build dataset
+    trainDataLoader,testDataLoader,valDataLoader =  build_datasets(hy_param)
 
-def run_process(mode,model_path='./save_models'):
     if mode == 'train':
         best_acc = 0.0
         for epoch in range(0, hy_param['epochs']):
@@ -49,9 +84,9 @@ def run_process(mode,model_path='./save_models'):
             #Train Start
             network.train()
             for item in trainDataLoader:
-                x = item['x'].squeeze(dim=0)
-                edge_index = item['edge_index'].squeeze(dim=0)
-                gt_label = item['meta']['GT'].squeeze(dim=0)
+                x = item['nodes'].squeeze(dim=0) #[1,4,6,18]
+                edge_index = item['edge_index'].squeeze(dim=0) #[1,2,12]
+                gt_label = item['meta_data']['GT'].squeeze(dim=0) #[1,12,3,18]
                 # print('id : ', item['meta']['id'])
 
                 logs, predict_value = network.process('train', x, edge_index, gt_label)
@@ -75,9 +110,11 @@ def run_process(mode,model_path='./save_models'):
             for item in valDataLoader:
                 with torch.no_grad():
                     network.eval()
-                    x = item['x'].squeeze(dim=0)
-                    edge_index = item['edge_index'].squeeze(dim=0)
-                    gt_label = item['meta']['GT'].squeeze(dim=0)
+                    x = item['nodes'].squeeze(dim=0)  # [1,4,6,18]
+                    edge_index = item['edge_index'].squeeze(dim=0)  # [1,2,12]
+                    gt_label = item['meta_data']['GT'].squeeze(dim=0)  # [1,12,3,18]
+                    # print('id : ', item['meta']['id'])
+                    
                     logs, predict_value = network.process('val', x, edge_index, gt_label)
                     running_loss += logs[1]
                     running_corrects += logs[3]
@@ -145,7 +182,7 @@ def run_process(mode,model_path='./save_models'):
                 robot_mappint_idx = {v.item(): k for k, v in item['meta']['robot_mappint_idx'].items()}
                 # print(robot_mappint_idx)
                 # print(relation_mapping_idx)
-                threshold = 0.44
+                threshold = 0.5
                 predict = predict_value['pred_rel'] >= threshold
 
                 for pos in predict.nonzero():
@@ -182,6 +219,11 @@ def run_process(mode,model_path='./save_models'):
                                                                      test_acc))
 
 if __name__ == '__main__':
+    hy_param = init_param()
+    # build model
+    network = GCMModel('GCMModel', hy_param, norm_flag=True)
+    print(network)
+
     #process Start
     # run_process(mode='train')
-    run_process(mode='test')
+    run_process(mode='train',hy_param=hy_param)

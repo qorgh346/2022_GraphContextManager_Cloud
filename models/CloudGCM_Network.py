@@ -1,45 +1,73 @@
 import sys
 import os
-from models.TripleNetGCN import TripletGCNModel
+sys.path.append("..")
+
+from models.TripleNetGCN import TripletGCN
+from models.TT_GCN import TemporalGNN
 from models.network_RelNet import RelNetFeat, RelNetCls
 import torch
 from torch import nn
 import torch.optim as optim
 import torch.nn.functional as F
 import math
-sys.path.append("..")
 import op_utils
 import numpy as np
 
 
 class GCMModel(nn.Module):
-    def __init__(self, name:str,hy_param,norm_flag=True):
+    def __init__(self, name:str,hy_param,norm_flag=True,temporal=True):
         super(GCMModel, self).__init__()
         self.name = name
         self.relation_info_num = hy_param['dim_rel']
         self.norm_flag = norm_flag
+        self.temporal = temporal
+        self.hy_param = hy_param
         # Build model
         models = dict()
         #각 노드마다 속성의 개수가 다 다를 수 있기 때문에 encoding을 통해 차원을 맞춰줌
-        models['obj_Node_encoder'] = nn.Sequential(nn.Linear(hy_param['dim_obj'],16),
-                                                   nn.BatchNorm1d(16),
-                                                   nn.ReLU(True),
-                                                   # nn.Dropout(0.1),
-                                                    nn.Linear(16,hy_param['dim_node'])
-                                                    )
-        models['rel_encoder'] = nn.Sequential(nn.Linear(hy_param['dim_rel'],16),
-                                              nn.BatchNorm1d(16),
-                                              nn.ReLU(True),
-                                              # nn.Dropout(0.1),
-                                               nn.Linear(16,hy_param['dim_edge'])
-                                               )
-        # Triplet GCN
-        models['triplet_gcn'] = TripletGCNModel(
-            num_layers=hy_param['num_layer'],
-            dim_node=hy_param['dim_node'],
-            dim_edge=hy_param['dim_edge'],
-            dim_hidden=hy_param['gcn_dim_hidden']
+
+        if temporal:
+            #TT_GCN (Temporal_Triplnet GCN)
+            models['tt_gcn'] = TemporalGNN(
+                node_features=hy_param['dim_node'],
+                periods=hy_param['periods'],
+                batch_size=hy_param['batch_size'],
+                out_channel=hy_param['gcn_dim_hidden'])
+            models['rel_encoder'] = nn.Sequential(
+                nn.Conv1d(in_channels=hy_param['dim_rel'], out_channels=16, kernel_size=1),
+                nn.BatchNorm1d(16),
+                nn.ReLU(True),
+                nn.Dropout(0.1),
+                nn.Conv1d(in_channels=16, out_channels=hy_param['dim_edge'], kernel_size=1))
+
+            models['obj_Node_encoder'] = nn.Sequential(
+                nn.Conv1d(in_channels=hy_param['dim_obj'], out_channels=16, kernel_size=1),
+                nn.BatchNorm1d(16),
+                nn.ReLU(True),
+                nn.Dropout(0.1),
+                nn.Conv1d(in_channels=16, out_channels=hy_param['dim_node'], kernel_size=1)
+                # nn.Linear(16, hy_param['dim_node'])
+                )
+        else:
+            # Triplet GCN
+            models['triplet_gcn'] = TripletGCNModel(
+                num_layers=hy_param['num_layer'],
+                dim_node=hy_param['dim_node'],
+                dim_edge=hy_param['dim_edge'],
+                dim_hidden=hy_param['gcn_dim_hidden']
         )
+            models['obj_Node_encoder'] = nn.Sequential(nn.Linear(hy_param['dim_obj'],16),
+                                                       nn.BatchNorm1d(16),
+                                                       nn.ReLU(True),
+                                                       # nn.Dropout(0.1),
+                                                        nn.Linear(16,hy_param['dim_node'])
+                                                        )
+            models['rel_encoder'] = nn.Sequential(nn.Linear(hy_param['dim_rel'],16),
+                                                  nn.BatchNorm1d(16),
+                                                  nn.ReLU(True),
+                                                  # nn.Dropout(0.1),
+                                                   nn.Linear(16,hy_param['dim_edge'])
+                                                   )
         #classification module
         # models['node_cls'] = nn.Sequential(nn.Linear(hy_param['gcn_dim_hidden'],16),
         #                                    nn.BatchNorm1d(16),
@@ -50,7 +78,7 @@ class GCMModel(nn.Module):
         #                                    )
 
         models['rel_cls'] = nn.Sequential(nn.Linear(hy_param['gcn_dim_hidden'], 32),
-                                          nn.BatchNorm1d(32),
+                                          nn.LayerNorm(32), #batchnorm1d
                                           nn.ReLU(True),
                                           # nn.Dropout(0.2),
                                            nn.Linear(32, hy_param['rel_num'])
@@ -69,14 +97,22 @@ class GCMModel(nn.Module):
         self.criterion = nn.BCELoss()
 
     def forward(self, node_feature, rel_feature, edges_index):
+        # nodeFeature  =  torch.Size([4, 32, 18])
+        # edgeFeature =  torch.Size([12, 32, 18])
 
-        obj_feature = self.obj_Node_encoder(node_feature)
-
-        edge_feature = self.rel_encoder(rel_feature)  # relationship 피쳐 추출
-        gcn_obj_feature, gcn_rel_feature = self.triplet_gcn(obj_feature, edge_feature, edges_index)
+        if self.temporal:
+            obj_feature = self.obj_Node_encoder(node_feature)
+            edge_feature = self.rel_encoder(rel_feature)
+            gcn_obj_feature, gcn_rel_feature = self.tt_gcn(obj_feature.unsqueeze(dim=0),edges_index,edge_feature.unsqueeze(dim=0))
+        else:
+            input_nodeFeature = node_feature.permute(2,0,1)
+            input_edgeFeature = rel_feature.permute(2,0,1)
+            obj_feature = self.obj_Node_encoder(input_nodeFeature)  # .permute(1,2,0)
+            edge_feature = self.rel_encoder(input_edgeFeature)  # .permute(1,2,0)  # relationship 피쳐 추출
+            gcn_obj_feature, gcn_rel_feature = self.triplet_gcn(obj_feature, edge_feature, edges_index)
 
         # pred_node = self.node_cls(gcn_obj_feature)
-        pred_rel = self.rel_cls(gcn_rel_feature)
+        pred_rel = self.rel_cls(gcn_rel_feature) #[1,12,128]
         predict_value ={
             # 'pred_node' : pred_node
             'pred_rel' : pred_rel
@@ -125,19 +161,35 @@ class GCMModel(nn.Module):
     def process(self,mode,node_feature,edges_index,gt_value, weights_obj=None, weights_rel=None):
 
         #relation_feature 계산
-        relation_feature,node_feature = self.getRelFeat(node_feature,edges_index) #12,3
+        if self.temporal:
+            #반복문을 통해 하나씩 계산 후 timestamp 만큼 쌓아야함.
+            relation_features = list()
+            node_features = list()
+            for i in range(self.hy_param['periods']):
+                t_rel_feature,t_node_feature = self.getRelFeat(node_feature[:,:,i], edges_index)
+                # print(t_rel_feature.size()) # torch.Size([12, 3])
+                # print(t_node_feature.size())  #torch.Size([4, 6])
+                relation_features.append(t_rel_feature)
+                node_features.append(t_node_feature)
+                #뒤에 time stamp 만큼 쌓아야됌.
+            relation_features = torch.stack(relation_features).permute(1,2,0)
+            node_features = torch.stack(node_features).permute(1,2,0)
+        else:
+            relation_features,node_features = self.getRelFeat(node_feature,edges_index) #12,3
 
-        obj_feature, edge_feature, gcn_rel_feature, gcn_obj_feature,predict_value = self(node_feature, relation_feature, edges_index)
+        obj_feature, edge_feature, gcn_rel_feature, gcn_obj_feature,predict_value = self(node_features, relation_features, edges_index)
 
         #gt : [12,3] -- predict : [12,3]
         # rel_loss = self.criterion(predict_value['pred_rel'],gt_value.type(torch.FloatTensor))
 
-        rel_loss = F.binary_cross_entropy(predict_value['pred_rel'],gt_value.type(torch.FloatTensor))
+        rel_loss = F.binary_cross_entropy(predict_value['pred_rel'],gt_value[:,:,-1].unsqueeze(dim=0).type(torch.FloatTensor))
         # print(predict_value['pred_rel'])
         # print(gt_value.size())
         # print(gt_value)
         # print('--?')
-        acc = self.cal_acc(predict_value['pred_rel'],gt_value)
+
+        #05 19 나중에
+        #acc = self.cal_acc(predict_value['pred_rel'],gt_value)
         # sys.exit()
         # print(predict_value['pred_rel'])
         # print(rel_loss)
@@ -145,7 +197,7 @@ class GCMModel(nn.Module):
         if mode =='train':
             self.backward(rel_loss)
         logs = ("{} Loss/total_loss:".format(mode), rel_loss.detach().item(),
-                "Acc: ",acc)
+                "Acc: ",0)
 
         return logs,predict_value
 
@@ -166,11 +218,11 @@ class GCMModel(nn.Module):
         #         c += 1
 
         # ArgMax
-        max_pred_argmax = torch.argmax(pred, dim=1)
+        max_pred_argmax = torch.argmax(pred, dim=2)
         c = 0
-        # print(pred)
-        # print(gt)
-        for idx, i in enumerate(gt[:, ]):
+        print(pred.size())
+        print(gt.size())
+        for idx, i in enumerate(gt[:,:,-1]):
             if i[max_pred_argmax[idx]].item() == 1:
                 c += 1
         acc = c / pred.size(0)
@@ -183,9 +235,10 @@ if __name__ == '__main__':
     hy_param['dim_obj'] = 6
     hy_param['dim_rel'] = 3
     hy_param['dim_edge'] = 32
-    hy_param['gcn_dim_hidden'] = 32
+    hy_param['gcn_dim_hidden'] = 128
     hy_param['rel_num'] = 3
     hy_param['lr'] = 0.0001
+    hy_param['periods'] = 18
     #num_node
 
     hy_param['num_node'] = 4

@@ -17,7 +17,7 @@ def build_mlp(dim_list, activation='relu', do_bn=False,
         final_layer = (i == len(dim_list) - 2)
         if not final_layer or on_last:
             if do_bn:
-                layers.append(torch.nn.BatchNorm1d(dim_out))
+                layers.append(torch.nn.LayerNorm(dim_out)) #batchNorm1d
             if activation == 'relu':
                 layers.append(torch.nn.ReLU())
             elif activation == 'leakyrelu':
@@ -28,21 +28,22 @@ def build_mlp(dim_list, activation='relu', do_bn=False,
 
 
 # Message Passing
-
 class TripletGCN(MessagePassing):  # Message Passing
     def __init__(self, dim_node, dim_edge, dim_hidden, aggr='add', use_bn=True):  # 2,
+        #         self.conv_h = TripletGCN(dim_node=self.in_channels,dim_edge=self.in_channels,dim_hidden=self.in_channels)
         super().__init__(aggr=aggr)
         self.dim_node = dim_node  # 256
         self.dim_edge = dim_edge
         self.dim_hidden = dim_hidden  # 512
         self.nn1 = build_mlp([dim_node * 2 + dim_edge, dim_hidden, dim_hidden * 2 + dim_edge],
                              do_bn=use_bn, on_last=True)
-        print(self.nn1)
         # dim_node *2 + dim_edge 이란?
         # source Node 속성 개수 + Target Node 속성 개수 + edgeFeature 속성 개수
 
-        self.nn2 = build_mlp([dim_hidden, dim_hidden, dim_node], do_bn=use_bn)
+        self.nn2 = build_mlp([dim_hidden, dim_hidden, dim_hidden], do_bn=use_bn)
                                                         #최종적으로는 원래 노드의 개수가 나와야됌
+        self.nn3 = build_mlp([dim_edge, dim_hidden, dim_hidden], do_bn=use_bn)
+
 
     def forward(self, x, edge_feature, edge_index):
         # print(' TripletGCN의 forward 함수 시작 ')
@@ -52,15 +53,13 @@ class TripletGCN(MessagePassing):  # Message Passing
         gcn_x, gcn_e = self.propagate(edge_index, x=x, edge_feature=edge_feature)  # 메시지 전파 시작을 위한 초기 호출
         # print('propagate 후')
         x = self.nn2(gcn_x)  ### mlp 2단계 : 특정 노드의 경우 집합 단계에서 해당 노드(sub, obj)의 모든 가능한 연결에서 오는 신호들은 함께 평균화됨
+        gcn_e = self.nn3(gcn_e)
         #2022.02.15
         # gcn feature 에서
         # gcn_x 는 Node 분류에 사용할 때 사용하는거고
         # gcn_e 는 이제 edge graph context feature 인데 이걸로
         # 공간관계 분류기, hand 관계분류기, hand_obj 관계 분류기로 들어가 output을 출력하도록 하자!
 
-        # print('nn2 후 최종 return')
-        # print('gcn 후 MLP에 들어간 후 노드들 = ',x.size())
-        # print('gcn 후 Edge Feature 들 = ',gcn_e.size())
 
         return x, gcn_e
 
@@ -69,12 +68,12 @@ class TripletGCN(MessagePassing):  # Message Passing
         # print('source Node 사이즈 : ',x_i.size())
         # print('target Node 사이즈 : ',x_j.size())
         # print('Edge Feature 사이즈 : ',edge_feature.size())
-        x = torch.cat([x_i, edge_feature, x_j], dim=1)
-        x = self.nn1(x)  # .view(b,-1) ### mlp 1단계 : triplet ij 정보 전달을 위해 mlp에 제공됨
-        # print('첫번째 nn1 후 : ',x.size())
-        new_x_i = x[:, :self.dim_hidden] #전체 18개의 edge_index 관계들 중에 0~128개까지의 가중치만 사용
-        new_e = x[:, self.dim_hidden:(self.dim_hidden + self.dim_edge)] #이건 128 부터 168까지 사용 -> 딱 edge_feature의 개수만큼
-        new_x_j = x[:, (self.dim_hidden + self.dim_edge):] #이건 168 부터 다 사용 -> 그럼 이것도 총 128개임
+        x = torch.cat([x_i, edge_feature, x_j], dim=2)
+        # x = self.nn1(x.squeeze(dim=0))  # .view(b,-1) ### mlp 1단계 : triplet ij 정보 전달을 위해 mlp에 제공됨
+        x = self.nn1(x)
+        new_x_i = x[:,:, :self.dim_hidden] #전체 18개의 edge_index 관계들 중에 0~128개까지의 가중치만 사용
+        new_e = x[:,:, self.dim_hidden:(self.dim_hidden + self.dim_edge)] #이건 128 부터 168까지 사용 -> 딱 edge_feature의 개수만큼
+        new_x_j = x[:,:, (self.dim_hidden + self.dim_edge):] #이건 168 부터 다 사용 -> 그럼 이것도 총 128개임
         x = new_x_i + new_x_j #업데이트 된 source Node의 속성들(128개) + 업데이트 된 Target Node의 속성들(128개) = 요소합이라서
                                                                                             # (edge_index 개수 ,128)임
         # print('Message 패싱 끝 -> return 하면 aggregate 가서 애들 모을거임')
